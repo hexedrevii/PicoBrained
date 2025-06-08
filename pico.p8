@@ -4,6 +4,9 @@ __lua__
 dt = 1/stat(7)
 
 function _init()
+	-- set btnp delay
+	poke(0x5f5d, 2.5)
+	
 	state:set(editing)
 end
 
@@ -119,6 +122,20 @@ function editing:__rmp(c)
 	self.cam.x -= c*8
 end
 
+function editing:__incs(c)
+	self.bounds.u += c
+	self.bounds.d += c
+	
+	self.cam.y += c*8
+end
+
+function editing:__rms(c)
+	self.bounds.u -= c
+	self.bounds.d -= c
+	
+	self.cam.y -= c*8
+end
+
 function editing:update()
 	-- cursor blinking
 	local cur = self.cursor
@@ -164,7 +181,8 @@ function editing:update()
 		-- if we want to delete
 		if self.active.token == tokens.kill then
 			self.lines[self.pos.ln][self.pos.cm] = nil
-		else -- place token down
+		else 
+		-- place token down
 			self.lines[self.pos.ln][self.pos.cm] = self.active.token
 		end
 	end
@@ -187,9 +205,15 @@ function editing:update()
 	if btnp(⬆️) then
 		if self.pos.ln > 1 then
 			self.pos.ln -= 1
+			if self.pos.ln < self.bounds.u then
+				self:__rms(1)
+			end
 		end
 	elseif btnp(⬇️) then
 		self.pos.ln += 1
+		if self.pos.ln > self.bounds.d then
+			self:__incs(1)
+		end
 	end
 end
 
@@ -202,14 +226,15 @@ function editing:draw()
 	-- line background
 	if settings.lsh then
 		rectfill(
-			0, cy,
-			128, cy + 7, 
+			0, cy - self.cam.y,
+			128, (cy - self.cam.y) + 7, 
 			settings.lcl
 		)
 	end
 	
-	-- the cursor line goes above the camera
-	-- but not the cursor... idk how this works?
+	-- set camera for cursor and tokens
+	--! the cursor line goes above the camera
+	--! but not the cursor... idk how this works?
 	camera(self.cam.x, self.cam.y)
 
 	
@@ -237,6 +262,8 @@ function editing:draw()
 		end
 	end
 	
+	-- reset camera for ui
+	-- (the bands)
 	camera(0, 0)
 	
 	-- top band
