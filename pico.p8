@@ -21,6 +21,7 @@ function _draw()
 	state:draw()
 end
 
+-- state
 state = {
 	active = nil
 }
@@ -41,6 +42,114 @@ function state:draw()
 		self.active:draw()
 	end
 end
+
+-- state machine
+state_machine = {}
+state_machine.__index = state_machine
+
+function state_machine:new()
+	return setmetatable({
+		states = {},
+		active = nil,
+	}, state_machine)
+end
+
+function state_machine:push(name, nstate)
+	nstate:init()
+	self.states[name] = nstate
+end
+
+function state_machine:set(name)
+	self.active = self.states[name]
+end
+
+function state_machine:update()
+	if self.active == nil then
+		return
+	end
+	
+	self.active:update()
+end
+
+function state_machine:draw()
+	if self.active == nil then
+		return
+	end
+	
+	self.active:draw()
+end
+
+-- ui stuff
+button = {}
+button.__index = button
+
+function button:new(x, y, text, action)
+	local b = {
+		x = x, y = y,
+		text = text,
+		
+		action = action,
+	}
+	
+	return setmetatable(b, button)
+end
+
+function button:update()
+end
+
+function button:draw(cl)
+	?self.text,self.x,self.y,cl
+end
+
+handler = {}
+handler.__index = handler
+
+function handler:new()
+	return setmetatable({
+		elements = {},
+		active = 1,
+	}, handler)
+end
+
+function handler:add(ui)
+	add(self.elements, ui)
+end
+
+function handler:update()
+	for element in all(self.elements) do
+		element:update()
+	end
+	
+	if btnp(⬇️) then
+		self.active += 1
+		if self.active > #self.elements then
+			self.active = 1 -- wrap around to top
+		end
+	end
+
+	if btnp(⬆️) then
+		self.active -= 1
+		if self.active < 1 then
+			self.active = #self.elements -- wrap around to bottom
+		end
+	end
+	
+	if btnp(❎) then
+		self.elements[self.active]:action()
+	end
+end
+
+function handler:draw()
+	for idx,element in ipairs(self.elements) do
+		local cl = settings.bdt
+		if idx == self.active then
+			cl = settings.bda
+			?"!",element.x+(#element.text * 4) + 1,element.y, settings.bda
+		end
+		
+		element:draw(cl)
+	end
+end
 -->8
 -- settings
 
@@ -51,7 +160,7 @@ cursor_type = {
 
 settings = {
 	bg = 5,
-	bd = 8, bdt = 2,
+	bd = 8, bdt = 2, bda = 9,
 	
 	cs = 8, ct = cursor_type.block,
 	lsh = true,
@@ -75,13 +184,20 @@ tokens = {
 editing = {}
 
 function editing:init()
+	self.min = 0
 	self.pos = {
-		ln = 1, cm = 0,
+		ln = 1, cm = self.min,
 	}
 	
 	self.lines = {
 		[1] = {}
 	}
+	
+	self.states = state_machine:new()
+	self.states:push("normal", normal)
+	self.states:push("menu", menu)
+	
+	self.states:set("normal")
 	
 	self.active = {
 		token = tokens.kill,
@@ -152,69 +268,7 @@ function editing:update()
 		self.active.blink_time = 0	
 	end
 	
-	-- token switching
-	if btn(🅾️) then
-		if btnp(⬅️) then
-			if self.active.token > 1 then
-				self.active.token -= 1
-			end
-		elseif btnp(➡️) then
-			if self.active.token < 9 then
-				self.active.token += 1
-			end
-		end
-		
-		return
-	end
-	
-	-- place token
-	if btnp(❎) then
-		-- fill up empty lines
-		if self.lines[self.pos.ln] == nil then
-			for i=1,self.pos.ln do
-				if self.lines[i] == nil then
-					self.lines[i] = {}
-				end
-			end
-		end
-		
-		-- if we want to delete
-		if self.active.token == tokens.kill then
-			self.lines[self.pos.ln][self.pos.cm] = nil
-		else 
-		-- place token down
-			self.lines[self.pos.ln][self.pos.cm] = self.active.token
-		end
-	end
-	
-	-- position
-	if btnp(➡️) then
-		self.pos.cm += 1
-		if self.pos.cm > self.bounds.r then
-			self:__incp(1)
-		end
-	elseif btnp(⬅️) then
-		if self.pos.cm >= 1 then 
-			self.pos.cm -= 1
-			if self.pos.cm < self.bounds.l then
-				self:__rmp(1)
-			end
-		end
-	end
-	
-	if btnp(⬆️) then
-		if self.pos.ln > 1 then
-			self.pos.ln -= 1
-			if self.pos.ln < self.bounds.u then
-				self:__rms(1)
-			end
-		end
-	elseif btnp(⬇️) then
-		self.pos.ln += 1
-		if self.pos.ln > self.bounds.d then
-			self:__incs(1)
-		end
-	end
+	self.states:update()
 end
 
 function editing:draw()
@@ -266,6 +320,8 @@ function editing:draw()
 	-- (the bands)
 	camera(0, 0)
 	
+	self.states:draw()
+	
 	-- top band
 	rectfill(
 		0,0, 128, 6, settings.bd
@@ -287,6 +343,159 @@ function editing:draw()
 	if self.active.show then
 		spr(self.active.token, 120, 121)
 	end
+end
+-->8
+-- editor states
+
+normal = {}
+
+function normal:init()
+end
+
+function normal:update()
+	self = editing
+	-- token switching
+	if btn(🅾️) then
+		if btnp(⬅️) then
+			if self.active.token > 1 then
+				self.active.token -= 1
+			end
+		elseif btnp(➡️) then
+			if self.active.token < 9 then
+				self.active.token += 1
+			end
+		end
+		
+		-- open menu
+		if btnp(⬇️) then
+			menu.handle.active = 1
+			self.states:set("menu")
+		end
+		
+		return
+	end
+	
+	-- place token
+	if btnp(❎) then
+		-- fill up empty lines
+		if self.lines[self.pos.ln] == nil then
+			for i=1,self.pos.ln do
+				if self.lines[i] == nil then
+					self.lines[i] = {}
+				end
+			end
+		end
+		
+		-- if we want to delete
+		if self.active.token == tokens.kill then
+			self.lines[self.pos.ln][self.pos.cm] = nil
+		else 
+		-- place token down
+			self.lines[self.pos.ln][self.pos.cm] = self.active.token
+		end
+	end
+	
+	-- position
+	if btnp(➡️) then
+		self.pos.cm += 1
+		if self.pos.cm > self.bounds.r then
+			self:__incp(1)
+		end
+	elseif btnp(⬅️) then
+		if self.pos.cm > self.min then 
+			self.pos.cm -= 1
+			if self.pos.cm < self.bounds.l then
+				self:__rmp(1)
+			end
+		end
+	end
+	
+	if btnp(⬆️) then
+		if self.pos.ln > 1 then
+			self.pos.ln -= 1
+			if self.pos.ln < self.bounds.u then
+				self:__rms(1)
+			end
+		end
+	elseif btnp(⬇️) then
+		self.pos.ln += 1
+		if self.pos.ln > self.bounds.d then
+			self:__incs(1)
+		end
+	end
+end
+
+function normal:draw()
+end
+
+menu = {
+	sx = 55, sy = 60,
+	handle = handler:new(),
+	__count = 0
+}
+
+function menu:create(text, action)
+	self.__count += 1
+	self.handle:add(
+		button:new(
+			1, 8*self.__count, text,
+			action
+		)
+	)
+end
+
+function menu:init()
+	self:create("run code", function()
+		-- todo
+	end)
+	
+	self:create("options", function()
+		-- todo
+	end)
+	
+	self:create("copy to clip", function()
+		-- todo
+	end)
+	
+	self:create("paste clip", function()
+		local data = stat(4)
+		
+		local x = editing.pos.cm
+		local y = editing.pos.ln
+		
+		for idx=1,#data do
+			local ch = sub(data, idx, idx)
+			
+		end
+	end)
+	
+	self:create("clear code", function()
+		editing.lines = {
+			{}
+		}
+	end)
+	
+	self:create("return", function()
+		editing.states:set("normal")
+	end)
+	
+	self.sy = self.__count * 8
+end
+
+function menu:update()
+	self.handle:update()
+end
+
+function menu:draw()
+	local rx = 0
+	local ry = 7
+	rectfill(
+		rx, ry,
+		rx+self.sx, ry+self.sy,
+		settings.bd
+	)
+	
+	self.handle:draw()
 end
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
