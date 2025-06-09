@@ -151,6 +151,25 @@ function handler:draw()
 		element:draw(cl)
 	end
 end
+
+function toktostr(lines, nl)
+	local code = ""
+	for i=1,#lines do
+		local ln = lines[i]
+		for j=1,#ln do
+			local tk = ln[j]
+			if tk != nil and tk != -1 then
+				code = code .. tktoch[tk]
+			end
+		end
+		
+		if nl != nil then
+			code = code .. "\n"
+		end
+	end
+	
+	return code
+end
 -->8
 -- settings
 
@@ -474,11 +493,12 @@ function menu:init()
 	end)
 	
 	self:create("options", function()
-		-- todo
+		state:set(options)
 	end)
 	
 	self:create("copy to clip", function()
-		-- todo
+		local code = toktostr(editing.lines)
+		printh(code, "@clip")
 	end)
 	
 	self:create("paste clip", function()
@@ -573,15 +593,7 @@ function running:init()
 	self.output = ""
 	
 	-- create code
-	for i=1,#editing.lines do
-		local ln = editing.lines[i]
-		for j=1,#ln do
-			local tk = ln[j]
-			if tk != nil and tk != -1 then
-				self.code = self.code .. tktoch[tk]
-			end
-		end
-	end
+	self.code = toktostr(editing.lines)
 	
 	-- interpret code
 	local keys = split(self.code, "")	
@@ -659,15 +671,7 @@ function visual:init()
 	self.code = ""
 	
 	-- create code
-	for i=1,#editing.lines do
-		local ln = editing.lines[i]
-		for j=1,#ln do
-			local tk = ln[j]
-			if tk != nil and tk != -1 then
-				self.code = self.code .. tktoch[tk]
-			end
-		end
-	end
+	self.code = toktostr(editing.lines)
 	
 	-- interpret code
 	local keys = split(self.code, "")	
@@ -742,6 +746,21 @@ function visual:draw()
 	line(0,113,128,113,6)
 	?"return to editor ❎",1,115,6
 	?"⬅️/➡️ navigate cells",1,122,6
+end
+-->8
+-- options
+
+options = {
+}
+
+function options:init()
+end
+
+function options:update()
+end
+
+function options:draw()
+	cls(1)
 end
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
