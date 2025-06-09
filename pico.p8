@@ -251,12 +251,12 @@ function editing:once()
 	}
 	
 	self.bounds = {
-		l = 0, r = 15,
+		l = 1, r = 16,
 		u = 1, d = 14,
 	}
 	
 	self.cam = {
-		x = 0, y = 0,
+		x = 8, y = 0,
 	}
 end
 
