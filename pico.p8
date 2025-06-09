@@ -7,6 +7,7 @@ function _init()
 	-- set btnp delay
 	poke(0x5f5d, 2.5)
 	
+	editing:once()
 	state:set(editing)
 end
 
@@ -26,7 +27,7 @@ state = {
 	active = nil
 }
 
-function state:set(new)
+function state:set(new, runinit)
 	self.active = new
 	self.active:init()
 end
@@ -167,6 +168,8 @@ settings = {
 	lcl = 6,
 }
 
+-- internal
+
 tokens = {
 	kill = 1,
 	comma = 2,
@@ -178,13 +181,27 @@ tokens = {
 	bracket_open = 8,
 	bracket_close = 9,
 }
+
+chtotk = {
+	[">"] = 7, ["<"] = 6,
+	["+"] = 5, ["-"] = 4,
+	["["] = 8, ["]"] = 9,
+	[","] = 2, ["."] = 3,
+}
+
+tktoch = {
+	[7] = ">", [6] = "<",
+	[5] = "+", [4] = "-",
+	[8] = "[", [9] = "]",
+	[2] = ",", [3] = ".",
+}
 -->8
 -- editing
 
 editing = {}
 
-function editing:init()
-	self.min = 0
+function editing:once()
+	self.min = 1
 	self.pos = {
 		ln = 1, cm = self.min,
 	}
@@ -222,6 +239,9 @@ function editing:init()
 	self.cam = {
 		x = 0, y = 0,
 	}
+end
+
+function editing:init()
 end
 
 function editing:__incp(c)
@@ -388,7 +408,7 @@ function normal:update()
 		
 		-- if we want to delete
 		if self.active.token == tokens.kill then
-			self.lines[self.pos.ln][self.pos.cm] = nil
+			self.lines[self.pos.ln][self.pos.cm] = -1
 		else 
 		-- place token down
 			self.lines[self.pos.ln][self.pos.cm] = self.active.token
@@ -446,7 +466,11 @@ end
 
 function menu:init()
 	self:create("run code", function()
-		-- todo
+		state:set(running)
+	end)
+	
+	self:create("visual", function()
+		state:set(visual)
 	end)
 	
 	self:create("options", function()
@@ -465,7 +489,25 @@ function menu:init()
 		
 		for idx=1,#data do
 			local ch = sub(data, idx, idx)
+			if ch == "\n" then
+				y += 1
+				x = 1
+				goto continue
+			end
 			
+			if chtotk[ch] == nil then
+				goto continue
+			end
+			
+			local lns = editing.lines	
+			if lns[y] == nil then
+				lns[y] = {}
+			end
+			
+			lns[y][x] = chtotk[ch]
+			x += 1
+			
+			::continue::
 		end
 	end)
 	
@@ -496,6 +538,210 @@ function menu:draw()
 	)
 	
 	self.handle:draw()
+end
+-->8
+-- running
+
+bf_state = {}
+bf_state.__index = bf_state
+
+function bf_state:new()
+	cs = 30000
+	local b = {
+		cells = {},
+		current_index = 1,
+		loop_stack = {},
+	}
+	
+	for i=1,cs do 
+		b.cells[i] = 0
+	end
+	
+	return setmetatable(b, bf_state)
+end
+
+running = {
+	bfs = nil,
+	code = "",
+	output = "",
+	pos = 1,
+}
+
+function running:init()
+	self.bfs = bf_state:new()
+	self.code = ""
+	self.output = ""
+	
+	-- create code
+	for i=1,#editing.lines do
+		local ln = editing.lines[i]
+		for j=1,#ln do
+			local tk = ln[j]
+			if tk != nil and tk != -1 then
+				self.code = self.code .. tktoch[tk]
+			end
+		end
+	end
+	
+	-- interpret code
+	local keys = split(self.code, "")	
+	self.pos = 1
+	
+	while self.pos < #keys do
+		local key = keys[self.pos]	
+		if key == "+" then
+			self.bfs.cells[self.bfs.current_index] += 1
+			if self.bfs.cells[self.bfs.current_index] > 255 then
+				self.bfs.cells[self.bfs.current_index] = 0
+			end
+		elseif key == "-" then
+			self.bfs.cells[self.bfs.current_index] -= 1
+			if self.bfs.cells[self.bfs.current_index] < 0 then
+				self.bfs.cells[self.bfs.current_index] = 255
+			end
+		elseif key == ">" then
+			self.bfs.current_index += 1
+		elseif key == "<" then
+			if self.bfs.current_index > 1 then
+				self.bfs.current_index -= 1
+			end
+		elseif key == "[" then
+			add(self.bfs.loop_stack, self.pos)
+		elseif key == "]" then
+			if self.bfs.cells[self.bfs.current_index] == 0 then
+				deli(self.bfs.loop_stack, #self.bfs.loop_stack)
+			else
+				self.pos = self.bfs.loop_stack[#self.bfs.loop_stack]
+			end
+		elseif key == "." then
+			self.output = self.output .. chr(self.bfs.cells[self.bfs.current_index])
+		end
+		
+		self.pos += 1
+	end
+end
+
+function running:update()
+	if btnp(❎) then
+		state:set(editing, false)
+	end
+end
+
+function running:draw()
+	cls(0)
+	
+	-- code output
+	if self.output == "" then
+		?"no output.",1,10,7
+	else
+		?self.output,1,10,7
+	end	
+	-- ui
+	camera(0,0)
+	
+	?"output",1,1,7
+	line(0,7,128,7,7)
+	
+	line(0,120,128,120,6)
+	?"return to editor ❎",1,122,6
+end
+-->8
+-- visual
+
+visual = {}
+
+function visual:init()
+	self.bounds = {
+		x = 1, y = 9,
+	}
+	
+	self.bfs = bf_state:new()
+	self.code = ""
+	
+	-- create code
+	for i=1,#editing.lines do
+		local ln = editing.lines[i]
+		for j=1,#ln do
+			local tk = ln[j]
+			if tk != nil and tk != -1 then
+				self.code = self.code .. tktoch[tk]
+			end
+		end
+	end
+	
+	-- interpret code
+	local keys = split(self.code, "")	
+	self.pos = 1
+	
+	while self.pos < #keys do
+		local key = keys[self.pos]	
+		if key == "+" then
+			self.bfs.cells[self.bfs.current_index] += 1
+			if self.bfs.cells[self.bfs.current_index] > 255 then
+				self.bfs.cells[self.bfs.current_index] = 0
+			end
+		elseif key == "-" then
+			self.bfs.cells[self.bfs.current_index] -= 1
+			if self.bfs.cells[self.bfs.current_index] < 0 then
+				self.bfs.cells[self.bfs.current_index] = 255
+			end
+		elseif key == ">" then
+			self.bfs.current_index += 1
+		elseif key == "<" then
+			if self.bfs.current_index > 1 then
+				self.bfs.current_index -= 1
+			end
+		elseif key == "[" then
+			add(self.bfs.loop_stack, self.pos)
+		elseif key == "]" then
+			if self.bfs.cells[self.bfs.current_index] == 0 then
+				deli(self.bfs.loop_stack, #self.bfs.loop_stack)
+			else
+				self.pos = self.bfs.loop_stack[#self.bfs.loop_stack]
+			end
+		end
+		
+		self.pos += 1
+	end
+end
+
+function visual:update()
+	if btnp(❎) then
+		state:set(editing)
+	end
+
+	if btnp(⬅️) then
+		if self.bounds.x > 1 then
+			self.bounds.x -= 1
+			self.bounds.y -= 1
+		end
+	elseif btnp(➡️) then
+		self.bounds.x += 1
+		self.bounds.y += 1
+	end
+end
+
+function visual:draw()
+	cls(0)
+	
+	?"visual code representation",1,1,7
+	line(0,7,128,7,7)
+	
+ local x = 1
+	local y = 55
+	for i=self.bounds.x,self.bounds.y do
+		rect(
+			x,y,
+			x+14,y+8
+		)
+		?i,x+6,y - 7,7
+		?self.bfs.cells[i],x+2,y+2,7
+		x+=14
+	end
+	
+	line(0,113,128,113,6)
+	?"return to editor ❎",1,115,6
+	?"⬅️/➡️ navigate cells",1,122,6
 end
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
