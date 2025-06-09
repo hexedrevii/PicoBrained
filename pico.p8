@@ -4,6 +4,65 @@ __lua__
 dt = 1/stat(7)
 
 function _init()
+	-- id
+	cartdata("evemeows_picobrained")
+
+	-- set settings if exists
+	local lsh = dget(0) - 1
+	if lsh != 1 then
+		local sh = false
+		if sh == 1 then
+			sh = true
+		end
+		
+		settings.lsh = sh
+	end
+	
+	local ct = dget(1) - 1
+	if ct != 1 then
+		local c = cursor_type.ibeam
+		if ct == 1 then
+			c = cursor_type.block
+		end
+		
+		settings.ct = c
+	end
+	
+	local bg = dget(2) - 1
+	if bg != -1 then
+		settings.bg = bg
+	end
+	
+	local bg = dget(2) - 1
+	if bg != -1 then
+		settings.bg = bg
+	end
+	
+	local bd = dget(3) - 1
+	if bd != -1 then
+		settings.bd = bd
+	end
+	
+	local bdt = dget(4) - 1
+	if bdt != -1 then
+		settings.bdt = bdt
+	end
+	
+	local bda = dget(5) - 1
+	if bda != -1 then
+		settings.bda = bda
+	end
+	
+	local cs = dget(6) - 1
+	if cs != -1 then
+		settings.cs = cs
+	end
+	
+	local lcl = dget(7) - 1
+	if bg != -1 then
+		settings.lcl = lcl
+	end
+
 	-- set btnp delay
 	poke(0x5f5d, 2.5)
 	
@@ -81,6 +140,66 @@ function state_machine:draw()
 end
 
 -- ui stuff
+
+swatch = {}
+swatch.__index = swatch
+
+function swatch:new(x,y,text, colour, onchange, def)
+	local s = {
+		x=x,y=y,
+		org=text,
+		text=text,
+		action = function() end,
+		active = false,
+		colour = colour,
+		orgcl = colour,
+		def=def,
+		onchange = onchange,
+	}
+	s.text = s.text .. ": < " .. tostr(colour) .. " >"
+
+	return setmetatable(s, swatch)
+end
+
+function swatch:update()
+	if not self.active then
+		return
+	end
+	
+	if btnp(➡️) then
+		if self.colour < 15 then
+			self.colour += 1
+		end
+		
+		self.text = self.org .. ": < " .. tostr(self.colour) .. " >"
+		if self.onchange != nil then
+			self.onchange(self)
+		end
+	end
+	
+	if btnp(⬅️) then
+		if self.colour >= 1 then
+			self.colour -= 1
+		end
+		
+		self.text = self.org .. ": < " .. tostr(self.colour) .. " >"
+		if self.onchange != nil then
+			self.onchange(self)
+		end
+	end
+end
+
+function swatch:draw(cl)
+	?self.text,self.x,self.y,cl
+	
+	local sx = self.x + #self.text * 4 + 5
+	rectfill(
+		sx,self.y,
+		sx+4,self.y+4,
+		self.colour
+	)
+end
+
 button = {}
 button.__index = button
 
@@ -90,6 +209,7 @@ function button:new(x, y, text, action)
 		text = text,
 		
 		action = action,
+		active = false,
 	}
 	
 	return setmetatable(b, button)
@@ -114,6 +234,10 @@ end
 
 function handler:add(ui)
 	add(self.elements, ui)
+	
+	if #self.elements == 1 then
+		self.elements[1].active = true
+	end
 end
 
 function handler:update()
@@ -126,6 +250,11 @@ function handler:update()
 		if self.active > #self.elements then
 			self.active = 1 -- wrap around to top
 		end
+		
+		-- update elements
+		for i,e in ipairs(self.elements) do
+			e.active = i == self.active
+		end
 	end
 
 	if btnp(⬆️) then
@@ -133,16 +262,21 @@ function handler:update()
 		if self.active < 1 then
 			self.active = #self.elements -- wrap around to bottom
 		end
+		
+		-- update elements
+		for i,e in ipairs(self.elements) do
+			e.active = i == self.active
+		end
 	end
 	
 	if btnp(❎) then
-		self.elements[self.active]:action()
+		self.elements[self.active]:action(self.elements[self.active])
 	end
 end
 
-function handler:draw()
+function handler:draw(cst)
 	for idx,element in ipairs(self.elements) do
-		local cl = settings.bdt
+		local cl = cst or settings.bdt
 		if idx == self.active then
 			cl = settings.bda
 			?"!",element.x+(#element.text * 4) + 1,element.y, settings.bda
@@ -750,17 +884,125 @@ end
 -->8
 -- options
 
-options = {
-}
+options = {}
+function options:save_data()
+	-- 0 and 1 are reserved for cursor and line
+	local did = 2
+	for e in all(self.handler.elements) do
+		if e.colour != nil then 
+			dset(did, e.colour+1)
+			did += 1
+		end
+	end
+	
+	local lsh = 0
+	if settings.lsh then
+		lsh = 1
+	end
+	dset(0,lsh+1)
+	
+	local ct = 1
+	if settings.ct == cursor_type.ibeam then
+		ct = 2
+	end
+	dset(1,ct+1)
+end
+
+function options:__create(text,action)
+	self.__count += 1
+	self.handler:add(
+		button:new(
+			1,self.__offset + 8*self.__count,
+			text, action
+		)
+	)
+end
+
+function options:__swatch(text,colour, onchange)
+	self.__count += 1
+	self.handler:add(
+		swatch:new(
+			1,self.__offset + 8*self.__count,
+			text, colour, onchange
+		)
+	)
+end
 
 function options:init()
+	self.handler = handler:new()
+	self.__count = 0
+	self.__offset = 7
+	
+	self:__swatch("background colour", settings.bg, function(s) settings.bg = s.colour end)
+	
+	self.__offset += 7
+	
+	self:__swatch("band background", settings.bd, function(s) settings.bd = s.colour end)
+	self:__swatch("band foreground", settings.bdt, function(s) settings.bdt = s.colour end)
+	self:__swatch("band active colour", settings.bda, function(s) settings.bda = s.colour end)
+
+	self.__offset += 7
+
+	self:__swatch("cursor colour", settings.cs, function(s) settings.cs = s.colour end)
+	self:__create("toggle cursor type: " .. settings.ct, function(s) 
+		if settings.ct == cursor_type.block then
+			settings.ct = cursor_type.ibeam
+		else
+			settings.ct = cursor_type.block
+		end
+		
+		s.text = "toggle cursor type: " .. settings.ct
+	end)
+	
+	self.__offset += 7
+
+	
+	self:__create("toggle cursor line: " .. tostr(settings.lsh), function(s)
+		settings.lsh = not settings.lsh
+		s.text = "toggle cursor line: " .. tostr(settings.lsh)
+	end)
+	
+	self:__swatch("cursor line colour", settings.lcl, function(s) settings.lcl = s.colour end)
+
+	self.__offset += 7
+	
+	self:__create("reset to default", function()
+		settings = {
+			bg = 5,
+			bd = 8, bdt = 2, bda = 9,
+			
+			cs = 8, ct = cursor_type.block,
+			lsh = true,
+			lcl = 6,
+		}
+		
+		for e in all(self.handler.elements) do
+			if e.colour != nil then
+				e.colour = e.orgcl
+				e.text = e.org .. ": < " .. tostr(e.colour) .. " >"
+			end
+		end
+		
+		self:save_data()
+	end)
+	
+	self:__create("return", function()
+		self:save_data()
+		state:set(editing)
+	end)
 end
 
 function options:update()
+	self.handler:update()
 end
 
 function options:draw()
 	cls(1)
+	
+	self.handler:draw(7)
+	
+	?"editor options",1,1,7
+	line(0,7,128,7,7)
 end
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
