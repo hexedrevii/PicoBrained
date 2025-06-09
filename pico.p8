@@ -144,7 +144,7 @@ end
 swatch = {}
 swatch.__index = swatch
 
-function swatch:new(x,y,text, colour, onchange, def)
+function swatch:new(x,y,text, colour, onchange)
 	local s = {
 		x=x,y=y,
 		org=text,
@@ -153,7 +153,6 @@ function swatch:new(x,y,text, colour, onchange, def)
 		active = false,
 		colour = colour,
 		orgcl = colour,
-		def=def,
 		onchange = onchange,
 	}
 	s.text = s.text .. ": < " .. tostr(colour) .. " >"
@@ -978,7 +977,7 @@ function options:init()
 		
 		for e in all(self.handler.elements) do
 			if e.colour != nil then
-				e.colour = e.orgcl
+				e.colour = defaults[e.org]
 				e.text = e.org .. ": < " .. tostr(e.colour) .. " >"
 			end
 		end
@@ -1004,6 +1003,15 @@ function options:draw()
 	?"editor options",1,1,7
 	line(0,7,128,7,7)
 end
+
+defaults = {
+	["background colour"] = 5,
+	["band background"] = 8,
+	["band foreground"] = 2,
+	["band active colour"] = 9,
+	["cursor colour"] = 8,
+	["cursor line colour"] = 6,
+}
 __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000003b0000000e800009a00000022220000111100000000000000000000000000000000000000000000000000
