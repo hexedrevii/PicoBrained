@@ -2,8 +2,7 @@
 
 A small, configurable brainf*ck code editor, interpreter and visualiser, while only using the default Pico8 scheme.
 
-Use it on lexaloffle!
-<br>TODO
+Use it on [lexaloffle](https://www.lexaloffle.com/bbs/?tid=149466)!
 
 # Picobrained is a...
 
